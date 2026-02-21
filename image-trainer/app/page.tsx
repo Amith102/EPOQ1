@@ -26,7 +26,23 @@ interface TrainingStatus {
   accuracy: string;
   loss: string;
   status: string;
+  learning_rate?: string;
 }
+
+interface Preset {
+  name: string;
+  epochs: number;
+  batchSize: number;
+  model: string;
+  learningRate: number;
+}
+
+const PRESETS: Preset[] = [
+  { name: 'Quick Test', epochs: 2, batchSize: 16, model: 'resnet18', learningRate: 0.001 },
+  { name: 'Standard', epochs: 10, batchSize: 32, model: 'resnet18', learningRate: 0.001 },
+  { name: 'High Performance', epochs: 20, batchSize: 64, model: 'resnet50', learningRate: 0.0001 },
+  { name: 'Deep Learning', epochs: 30, batchSize: 32, model: 'eva02', learningRate: 0.0001 },
+];
 
 interface EvalResult {
   status: string;
@@ -42,8 +58,12 @@ export default function Home() {
   const [epochs, setEpochs] = useState(5);
   const [batchSize, setBatchSize] = useState(32);
   const [model, setModel] = useState('resnet18');
+  const [learningRate, setLearningRate] = useState(0.001);
   const [zipDataset, setZipDataset] = useState(false);
   const [onlyZip, setOnlyZip] = useState(false);
+  const [gpuAvailable, setGpuAvailable] = useState<boolean | null>(null);
+  const [showPresets, setShowPresets] = useState(false);
+  const [recentExperiments, setRecentExperiments] = useState<{id: string; date: string; accuracy: string; model: string}[]>([]);
   
   const [isRunning, setIsRunning] = useState(false);
   const [pid, setPid] = useState<number | null>(null);
@@ -58,7 +78,51 @@ export default function Home() {
 
   const logsEndRef = useRef<HTMLDivElement>(null);
   const commandRef = useRef<Command<string> | null>(null);
-  const childRef = useRef<any>(null); // To store child handle for killing
+  const childRef = useRef<any>(null);
+
+  // Check GPU availability on mount
+  useEffect(() => {
+    async function checkGpu() {
+      try {
+        const cmd = Command.create('python3', ['-c', 'import torch; print(torch.cuda.is_available())']);
+        cmd.stdout.on('data', (data) => {
+          setGpuAvailable(data.trim() === 'True');
+        });
+        cmd.stderr.on('data', () => {
+          setGpuAvailable(false);
+        });
+        await cmd.spawn();
+      } catch {
+        setGpuAvailable(false);
+      }
+    }
+    checkGpu();
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'Enter' && !isRunning && datasetPath) {
+          startTraining();
+        } else if (e.key === 'p') {
+          e.preventDefault();
+          setShowPresets(!showPresets);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRunning, datasetPath, showPresets]);
+
+  const applyPreset = (preset: Preset) => {
+    setEpochs(preset.epochs);
+    setBatchSize(preset.batchSize);
+    setModel(preset.model);
+    setLearningRate(preset.learningRate);
+    setShowPresets(false);
+    addLog(`Applied preset: ${preset.name}`, 'info');
+  }; // To store child handle for killing
 
   useEffect(() => {
     if (activeTab === 'logs') {
@@ -168,7 +232,8 @@ export default function Home() {
         '--path', datasetPath,
         '--epochs', epochs.toString(),
         '--batch_size', batchSize.toString(),
-        '--model', model
+        '--model', model,
+        '--learning_rate', learningRate.toString()
       ];
       args.push('--experiment_id', experimentId);
       if (savePath) args.push('--save_path', savePath);
@@ -186,6 +251,12 @@ export default function Home() {
         setPid(null);
         if (data.code === 0) {
             addLog('Training/Task Complete successfully.', 'success');
+            // Save to recent experiments
+            const expId = `exp_${Date.now()}`;
+            setRecentExperiments(prev => [
+              { id: expId, date: new Date().toLocaleDateString(), accuracy: currentStatus?.accuracy || 'N/A', model },
+              ...prev.slice(0, 4)
+            ]);
         }
       });
 
@@ -265,7 +336,42 @@ export default function Home() {
           </div>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          {/* GPU Status Indicator */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-zinc-900/50 border border-zinc-800 rounded-full">
+            <Cpu className={`w-4 h-4 ${gpuAvailable ? 'text-emerald-400' : 'text-zinc-500'}`} />
+            <span className="text-xs font-medium">
+              {gpuAvailable === null ? 'Checking...' : gpuAvailable ? 'GPU Available' : 'CPU Only'}
+            </span>
+          </div>
+
+          {/* Presets Button */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowPresets(!showPresets)}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-full text-sm text-zinc-300 transition-colors"
+            >
+              <Layers className="w-4 h-4" /> Presets
+            </button>
+            {showPresets && (
+              <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden">
+                {PRESETS.map((preset, i) => (
+                  <button
+                    key={i}
+                    onClick={() => applyPreset(preset)}
+                    className="w-full px-4 py-3 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex justify-between items-center"
+                  >
+                    <span>{preset.name}</span>
+                    <span className="text-xs text-zinc-500 font-mono">{preset.epochs}ep/{preset.batchSize}bs</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Keyboard Shortcut Hint */}
+          <span className="text-xs text-zinc-600 hidden lg:inline">Ctrl+Enter to start</span>
+           
            {isRunning ? (
              <button 
                onClick={() => {
@@ -330,6 +436,8 @@ export default function Home() {
                     className="w-full appearance-none bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-600 focus:outline-none transition-colors"
                   >
                     <option value="resnet18">ResNet-18 (Standard)</option>
+                    <option value="resnet50">ResNet-50 (Deep)</option>
+                    <option value="efficientnet_b0">EfficientNet-B0 (Efficient)</option>
                     <option value="dcn">DeepCrossNetwork (DCN)</option>
                     <option value="eva02">EVA-02 (Transformer)</option>
                   </select>
@@ -358,6 +466,34 @@ export default function Home() {
                     onChange={(e) => setBatchSize(parseInt(e.target.value) || 1)}
                     className="w-full bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-600 focus:outline-none transition-colors font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Learning Rate */}
+              <div className="space-y-2">
+                <label className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Learning Rate</label>
+                <input 
+                  type="number" 
+                  step="0.0001"
+                  min="0.00001"
+                  value={learningRate}
+                  onChange={(e) => setLearningRate(parseFloat(e.target.value) || 0.001)}
+                  className="w-full bg-black border border-zinc-800 rounded-lg py-2.5 px-3 text-sm text-zinc-300 focus:border-zinc-600 focus:outline-none transition-colors font-mono"
+                />
+                <div className="flex gap-2 mt-2">
+                  {[0.01, 0.001, 0.0001, 0.00001].map((lr) => (
+                    <button
+                      key={lr}
+                      onClick={() => setLearningRate(lr)}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${
+                        learningRate === lr 
+                          ? 'bg-white text-black border-white' 
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:border-zinc-500'
+                      }`}
+                    >
+                      {lr}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -400,6 +536,29 @@ export default function Home() {
                 </label>
               </div>
             </div>
+
+            {/* Recent Experiments */}
+            {recentExperiments.length > 0 && (
+              <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-4">
+                  <Activity className="w-5 h-5 text-zinc-400" />
+                  <h2 className="text-lg font-semibold tracking-tight">Recent Experiments</h2>
+                </div>
+                <div className="space-y-2">
+                  {recentExperiments.map((exp) => (
+                    <div key={exp.id} className="flex justify-between items-center p-3 bg-black/30 rounded-lg border border-zinc-800/50">
+                      <div>
+                        <div className="text-sm text-zinc-300 font-medium">{exp.model}</div>
+                        <div className="text-xs text-zinc-500">{exp.date}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-mono text-emerald-400">{exp.accuracy !== 'N/A' ? `${(parseFloat(exp.accuracy)*100).toFixed(2)}%` : exp.accuracy}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -413,8 +572,11 @@ export default function Home() {
                     <div>
                         <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-widest">Training Progress</h3>
                         <p className="text-2xl font-light text-white mt-1">
-                           {isRunning ? `Epoch ${currentStatus?.epoch || 0} span ${currentStatus?.total_epochs || epochs}` : "Complete"}
+                           {isRunning ? `Epoch ${currentStatus?.epoch || 0} / ${currentStatus?.total_epochs || epochs}` : "Complete"}
                         </p>
+                        {currentStatus?.learning_rate && (
+                          <p className="text-xs text-zinc-500 mt-1">Learning Rate: {currentStatus.learning_rate}</p>
+                        )}
                     </div>
                     <div className="text-right">
                        <div className="text-3xl font-bold font-mono text-white tracking-tighter">{currentStatus?.accuracy ? `${(parseFloat(currentStatus.accuracy)*100).toFixed(2)}%` : "0.00%"}</div>
