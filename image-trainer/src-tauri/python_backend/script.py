@@ -27,6 +27,10 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--zip_dataset', action='store_true', help='Create a zip archive of the dataset')
     parser.add_argument('--only_zip', action='store_true', help='Exit after creating dataset zip')
+    parser.add_argument('--hflip', action='store_true', help='Apply Random Horizontal Flip')
+    parser.add_argument('--rotation', type=int, default=0, help='Max rotation angle in degrees')
+    parser.add_argument('--color_jitter', type=float, default=0.0, help='Color Jitter intensity')
+    parser.add_argument('--blur', action='store_true', help='Apply Gaussian Blur')
     args = parser.parse_args()
     
     data_dir = args.path
@@ -39,15 +43,32 @@ def main():
     print("Initializing training...", flush=True)
 
     # Data Augmentation & Normalization
+    train_transforms_list = [
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+    ]
+
+    if args.hflip:
+        train_transforms_list.append(transforms.RandomHorizontalFlip())
+    if args.rotation > 0:
+        train_transforms_list.append(transforms.RandomRotation(args.rotation))
+    if args.color_jitter > 0:
+        train_transforms_list.append(transforms.ColorJitter(
+            brightness=args.color_jitter, 
+            contrast=args.color_jitter, 
+            saturation=args.color_jitter, 
+            hue=args.color_jitter * 0.5
+        ))
+    if args.blur:
+        train_transforms_list.append(transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)))
+
+    train_transforms_list.extend([
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
     data_transforms = {
-        'train': transforms.Compose([
-            transforms.Resize(256),
-            # transforms.RandomResizedCrop(224), # Optional: Add more config for this later
-            transforms.CenterCrop(224),
-            transforms.RandomHorizontalFlip(), 
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]),
+        'train': transforms.Compose(train_transforms_list),
         'val': transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),

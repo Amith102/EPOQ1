@@ -45,6 +45,12 @@ export default function Home() {
   const [zipDataset, setZipDataset] = useState(false);
   const [onlyZip, setOnlyZip] = useState(false);
   
+  // Data Augmentation State
+  const [hflip, setHflip] = useState(true);
+  const [rotation, setRotation] = useState(0);
+  const [colorJitter, setColorJitter] = useState(0.0);
+  const [blur, setBlur] = useState(false);
+
   const [isRunning, setIsRunning] = useState(false);
   const [pid, setPid] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -166,6 +172,15 @@ export default function Home() {
       if (savePath) args.push('--save_path', savePath);
       if (zipDataset) args.push('--zip_dataset');
       if (onlyZip) args.push('--only_zip');
+      
+      if (hflip) args.push('--hflip');
+      if (rotation > 0) {
+        args.push('--rotation', rotation.toString());
+      }
+      if (colorJitter > 0) {
+        args.push('--color_jitter', colorJitter.toString());
+      }
+      if (blur) args.push('--blur');
 
       addLog(`Starting command: python ${args.join(' ')}`, 'info');
 
@@ -371,6 +386,64 @@ export default function Home() {
                     <Save className="w-5 h-5" />
                   </button>
                 </div>
+              </div>
+
+              {/* Data Augmentation */}
+              <div className="pt-6 border-t border-zinc-800/50 space-y-4">
+                <div className="flex items-center gap-2 mb-2 text-zinc-400">
+                  <Activity className="w-4 h-4" />
+                  <h3 className="text-sm font-medium">Data Augmentation</h3>
+                </div>
+
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">Random Horizontal Flip</span>
+                  <div className={cn("w-10 h-6 rounded-full border flex items-center px-1 transition-all", hflip ? "bg-indigo-600 border-indigo-500 justify-end" : "bg-zinc-900 border-zinc-700 justify-start")}>
+                    <input type="checkbox" className="hidden" checked={hflip} onChange={e => setHflip(e.target.checked)} />
+                    <div className={cn("w-3.5 h-3.5 rounded-full transition-colors", hflip ? "bg-white" : "bg-zinc-500")} />
+                  </div>
+                </label>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <label className="text-sm text-zinc-300">Random Rotation</label>
+                    <span className="text-xs text-zinc-500 font-mono">{rotation}°</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0" max="90" step="5"
+                    value={rotation} 
+                    onChange={e => setRotation(parseInt(e.target.value))}
+                    className="w-full accent-indigo-500"
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-600 font-mono">
+                    <span>0°</span><span>90°</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <label className="text-sm text-zinc-300">Color Jitter</label>
+                    <span className="text-xs text-zinc-500 font-mono">{colorJitter.toFixed(2)}</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0" max="1" step="0.05"
+                    value={colorJitter} 
+                    onChange={e => setColorJitter(parseFloat(e.target.value))}
+                    className="w-full accent-indigo-500"
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-600 font-mono">
+                    <span>0.0</span><span>1.0</span>
+                  </div>
+                </div>
+
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">Gaussian Blur</span>
+                  <div className={cn("w-10 h-6 rounded-full border flex items-center px-1 transition-all", blur ? "bg-indigo-600 border-indigo-500 justify-end" : "bg-zinc-900 border-zinc-700 justify-start")}>
+                    <input type="checkbox" className="hidden" checked={blur} onChange={e => setBlur(e.target.checked)} />
+                    <div className={cn("w-3.5 h-3.5 rounded-full transition-colors", blur ? "bg-white" : "bg-zinc-500")} />
+                  </div>
+                </label>
               </div>
 
               {/* Toggles */}
