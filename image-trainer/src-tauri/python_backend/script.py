@@ -285,6 +285,16 @@ def main():
                         best_acc = epoch_acc
                         best_model_path = os.path.join(save_dir, 'best_model.pth')
                         torch.save(model.state_dict(), best_model_path)
+                        
+                        # Save Metadata for Inference
+                        metadata_path = os.path.join(save_dir, 'model_metadata.json')
+                        with open(metadata_path, 'w') as f:
+                            json.dump({
+                                "model": args.model,
+                                "num_classes": len(class_names),
+                                "classes": class_names
+                            }, f)
+
                         # Notify UI of checkpoint
                         print(json.dumps({
                             "status": "checkpoint", 
