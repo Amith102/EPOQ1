@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision import models
-from torchvision.models import ResNet18_Weights
+from torchvision.models import ResNet18_Weights, ResNet50_Weights, EfficientNet_B0_Weights
 
 # --- Custom Blocks ---
 class DeformableBlock(nn.Module):
@@ -58,6 +58,8 @@ def _replace_layers_with_dcn(model):
 def get_available_models():
     return {
         'resnet18': 'ResNet18 (Standard)',
+        'resnet50': 'ResNet50 (Deep)',
+        'efficientnet_b0': 'EfficientNet-B0 (Efficient)',
         'dcn': 'Deformable CNN (Advanced)',
         'eva02': 'EVA-02 ViT (Transformer)'
     }
@@ -76,6 +78,12 @@ def create_model(model_name, num_classes, device):
         
     elif model_name == 'resnet18':
         model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        
+    elif model_name == 'resnet50':
+        model = models.resnet50(weights=ResNet50_Weights.DEFAULT)
+        
+    elif model_name == 'efficientnet_b0':
+        model = models.efficientnet_b0(weights=EfficientNet_B0_Weights.DEFAULT)
         
     elif model_name == 'eva02':
         # Using EVA-02 Base Patch14 224
@@ -109,6 +117,10 @@ def create_model(model_name, num_classes, device):
     if model_name == 'eva02':
         # timm helper to reset head to num_classes
         model.reset_classifier(num_classes)
+    elif model_name == 'efficientnet_b0':
+        # EfficientNet uses a classifier with Dropout
+        num_ftrs = model.classifier[1].in_features
+        model.classifier[1] = nn.Linear(num_ftrs, num_classes)
     else:
         # Standard ResNet approach
         num_ftrs = model.fc.in_features
